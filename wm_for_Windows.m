@@ -22,7 +22,7 @@ function varargout = wm_for_Windows(varargin)
 
 % Edit the above text to modify the response to help wm_for_Windows
 
-% Last Modified by GUIDE v2.5 22-Oct-2024 10:59:19
+% Last Modified by GUIDE v2.5 14-Nov-2024 20:24:59
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -79,6 +79,8 @@ global tmpSliceNumber; % set number of slices
 tmpSliceNumber=32;
 global tmpSliceOrder;
 tmpSliceOrder=1;
+global grayMatterTemplate;
+grayMatterTemplate=1;
 global tmpReferenceSlice; % set reference slice
 tmpReferenceSlice=1;
 global tmpwmthresh; % set white matter mask thresheold
@@ -399,7 +401,7 @@ function begin_Callback(hObject, eventdata, handles)
     
     %% add path
     addpath(genpath([pwd,'\add2path\']));
-    
+
     
     %% preprocessing
     path1=pwd;
@@ -422,11 +424,14 @@ function begin_Callback(hObject, eventdata, handles)
     global tmpTR; % set TR
     global tmpSliceNumber; % set number of slices
     global tmpSliceOrder;
+    global grayMatterTemplate;
     global tmpReferenceSlice; % set reference slice
     global tmpwmthresh; % set white matter mask thresheold
     global tmpIsNeedConvertDCM2IMG;
     global tmpIsNeedReorientImgInteractively;
     global tmpRemoveFirstTimePoints;
+    global GM_label;
+
     
     Cfg.TimePoints=240; 
     Cfg.TR=2.01; 
@@ -464,14 +469,12 @@ function begin_Callback(hObject, eventdata, handles)
     
     Cfg.IsNeedReorientFunImgInteractively = tmpIsNeedReorientImgInteractively;
     Cfg.IsNeedReorientT1ImgInteractively = tmpIsNeedReorientImgInteractively;
-    Cfg.RemoveFirstTimePoints = tmpRemoveFirstTimePoints;
-    
-    %% 
+    Cfg.RemoveFirstTimePoints = tmpRemoveFirstTimePoints; 
 
 
     %###############################################################%
     save prepro_saved.mat Cfg;
-    DPARSFA_run('prepro_saved.mat');
+    %DPARSFA_run('prepro_saved.mat');
     cd(path1);
     disp('dpabi run success');
     uiwait(msgbox('dpabi预处理已完成','提示','help'));
@@ -490,11 +493,19 @@ function begin_Callback(hObject, eventdata, handles)
         end
         copyfile([pwd,'\preprocess\FunImgARWDF\'],[pwd,'\result1_corrmatrix\FunImgARWDF\']);
         copyfile([pwd,'\preprocess\T1ImgNewSegment\'],[pwd,'\result1_corrmatrix\T1ImgNewSegment\']);
-        nii=load_nii([pwd,'\atlas\Brodmann\Brodmann_YCG_fl.nii']);
-        Brd=nii.img;
-        load([pwd,'\atlas\Brodmann\Brodmann_YCG_Labels.mat']);
-        label=cell2mat(Reference(:,2));
-        Brd_label=label([2:2:82,83:-2:3]);
+
+        % grayMatterTemplate: Brodmann(1) AAL(2)
+
+
+        switch grayMatterTemplate
+        case 1
+            nii=load_nii([pwd,'\atlas\Brodmann\Brodmann_YCG_fl.nii']);
+        case 2
+            nii=load_nii([pwd,'\atlas\AAL\AAL.nii']);
+        end
+        
+        GM=nii.img;
+        
         nii=load_nii([pwd,'\atlas\EVE\Eve_MNI152_Seg2.hdr']);
         Eve=nii.img;
         Eve_label=[8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 ...
@@ -521,8 +532,8 @@ function begin_Callback(hObject, eventdata, handles)
             nii.img=img;
             save_nii(nii,[pwd,'\result1_corrmatrix\T1ImgNewSegment\',list(i).name,'\image.nii']);
             
-            matr=zeros(length(Brd_label),length(Eve_label));
-            Brd_time=zeros(length(Brd_label),Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
+            matr=zeros(length(GM_label),length(Eve_label));
+            GM_time=zeros(length(GM_label),Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
             Eve_time=zeros(length(Eve_label),Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
             
             nii=load_nii([pwd,'\result1_corrmatrix\FunImgARWDF\',list(i).name,'\image.nii']);
@@ -536,13 +547,13 @@ function begin_Callback(hObject, eventdata, handles)
             img=(img-imgmean)./(imgstd+eps);
             img=reshape(img,181,217,181,Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
             
-            for j=1:length(Brd_label)
-                roi=logical(Brd==Brd_label(j));
+            for j=1:length(GM_label)
+                roi=logical(GM==GM_label(j));
                 roi=repmat(roi,1,1,1,Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
                 tmp=img.*roi;
                 tmp=reshape(tmp,181*217*181,Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
                 roi=reshape(roi,181*217*181,Cfg.TimePoints-Cfg.RemoveFirstTimePoints);
-                Brd_time(j,:)=sum(tmp,1)./sum(roi,1);
+                GM_time(j,:)=sum(tmp,1)./sum(roi,1);
             end
             
             for j=1:length(Eve_label)
@@ -554,15 +565,15 @@ function begin_Callback(hObject, eventdata, handles)
                 Eve_time(j,:)=sum(tmp,1)./sum(roi,1);
             end
             
-            for j=1:length(Brd_label)
+            for j=1:length(GM_label)
                 for k=1:length(Eve_label)
-                    tmp=corrcoef(Brd_time(j,:),Eve_time(k,:));
+                    tmp=corrcoef(GM_time(j,:),Eve_time(k,:));
                     matr(j,k)=tmp(1,2);
                 end
             end
             matr=matr';
             matr=mapminmax(matr(:)');
-            matr=reshape(matr,length(Eve_label),length(Brd_label));
+            matr=reshape(matr,length(Eve_label),length(GM_label));
         
             matr_WW=zeros(length(Eve_label),length(Eve_label));
             for j=1:length(Eve_label)
@@ -575,18 +586,18 @@ function begin_Callback(hObject, eventdata, handles)
             matr_WW=mapminmax(matr_WW(:)');
             matr_WW=reshape(matr_WW,length(Eve_label),length(Eve_label));
         
-            matr_GG=zeros(length(Brd_label),length(Brd_label));
-            for j=1:length(Brd_label)
-                for k=1:length(Brd_label)
-                    tmp=corrcoef(Brd_time(j,:),Brd_time(k,:));
+            matr_GG=zeros(length(GM_label),length(GM_label));
+            for j=1:length(GM_label)
+                for k=1:length(GM_label)
+                    tmp=corrcoef(GM_time(j,:),GM_time(k,:));
                     matr_GG(j,k)=tmp(1,2);
                 end
             end
             matr_GG=matr_GG';
             matr_GG=mapminmax(matr_GG(:)');
-            matr_GG=reshape(matr_GG,length(Brd_label),length(Brd_label));
+            matr_GG=reshape(matr_GG,length(GM_label),length(GM_label));
         
-            save([pwd,'\result1_corrmatrix\matr_',list(i).name,'.mat'],'matr','matr_WW','matr_GG','Eve_time','Brd_time');
+            save([pwd,'\result1_corrmatrix\matr_',list(i).name,'.mat'],'matr','matr_WW','matr_GG','Eve_time','GM_time');
         end
         list1=list;
         uiwait(msgbox('corrmatrix已完成计算','提示','help'));
@@ -753,4 +764,110 @@ function begin_Callback(hObject, eventdata, handles)
 
     end
     disp('main batch success!!');
+end
+
+
+% --- Executes on selection change in GMTemplate.
+function GMTemplate_Callback(hObject, eventdata, handles)
+% hObject    handle to GMTemplate (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns GMTemplate contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from GMTemplate
+global grayMatterTemplate;
+grayMatterTemplate = get(hObject, 'value');
+
+
+% 清空表格
+set(handles.tableROI, 'Data', {});
+
+% 根据选择的模板更新 ROI 表格
+switch grayMatterTemplate
+    case 1 % Brodmann
+        load([pwd,'/atlas/Brodmann/Brodmann_YCG_Labels.mat']);
+        ROINames = Reference(:,1);
+        ROIValues = cell2mat(Reference(:,2));
+        Brd_label = ROIValues([2:2:82,83:-2:3]);
+        set(handles.tableROI, 'Data', num2cell(Brd_label), 'ColumnName', {'Value'});
+        numLabels = length(Brd_label);
+        allLabels = 1:numLabels;
+        set(handles.editROILabel, 'String', num2str(allLabels));
+
+    case 2 % AAL
+        nii = load_nii([pwd,'/atlas/AAL/AAL.nii']);
+        AAL = nii.img;
+        uniqueLabels = unique(AAL(AAL > 0));
+        numLabels = length(uniqueLabels); 
+        set(handles.tableROI, 'Data', num2cell(uniqueLabels), 'ColumnName', {'Value'});
+        allLabels = 1:numLabels;
+        set(handles.editROILabel, 'String', num2str(allLabels));
+end
+
+guidata(hObject, handles);
+end
+
+% --- Executes during object creation, after setting all properties.
+function GMTemplate_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to GMTemplate (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+end
+
+function tableROI_Callback(hObject, eventdata, handles)
+% hObject    handle to tableROI (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+end
+
+
+
+function editROILabel_Callback(hObject, eventdata, handles)
+% hObject    handle to editROILabel (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+global grayMatterTemplate;
+global GM_label;
+
+switch grayMatterTemplate
+    case 1 % Brodmann
+        load([pwd,'/atlas/Brodmann/Brodmann_YCG_Labels.mat']);
+        ROIValues = cell2mat(Reference(:,2));
+        Brd_label = ROIValues([2:2:82,83:-2:3]);
+        uniqueLabels = 1:length(Brd_label)
+        userInputStr = get(hObject,'String');
+        userInputStr = strsplit(userInputStr, ' ');
+        userInput = str2double(userInputStr);
+        GM_label = uniqueLabels(ismember(uniqueLabels, userInput));
+        
+    case 2 % AAL
+        nii = load_nii([pwd,'/atlas/AAL/AAL.nii']);
+        AAL = nii.img;
+        uniqueLabels = unique(AAL(AAL > 0));
+        userInputStr = get(hObject,'String');
+        userInputStr = strsplit(userInputStr, ' ');
+        userInput = str2double(userInputStr);
+        GM_label = uniqueLabels(ismember(uniqueLabels, userInput));
+        
+end
+end
+
+% --- Executes during object creation, after setting all properties.
+function editROILabel_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to editROILabel (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
 end
