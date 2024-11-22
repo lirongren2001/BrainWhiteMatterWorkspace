@@ -22,7 +22,7 @@ function varargout = wm_for_Windows(varargin)
 
 % Edit the above text to modify the response to help wm_for_Windows
 
-% Last Modified by GUIDE v2.5 14-Nov-2024 20:24:59
+% Last Modified by GUIDE v2.5 20-Nov-2024 16:46:06
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -101,6 +101,24 @@ ifresult2=0;
 ifresult3=0;
 ifresult4=0;
 ifresult5=0;
+end
+
+% --- Executes on button press in pushbutton3.
+function pushbutton3_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton3 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+TR_slicenumber_timepointsnumber
+set(handles.Timepoint,'String',num2str(parameter_timepoints));
+set(handles.SliceNumber,'String',num2str(parameter_slicenumber));
+set(handles.TR,'String',num2str(parameter_TR));
+guidata(hObject, handles);
+global tmpTimePoints; % set number of TRs
+tmpTimePoints=str2double(parameter_timepoints);
+global tmpTR; % set TR
+tmpTR=str2double(parameter_TR);
+global tmpSliceNumber; % set number of slices
+tmpSliceNumber=str2double(parameter_slicenumber);
 end
 
 function Timepoint_Callback(hObject, eventdata, handles)
@@ -276,7 +294,35 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 end
 
+function edit9_Callback(hObject, eventdata, handles)
+% hObject    handle to edit9 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+a = uigetdir; %进入文件夹选框
+global directory
+if a == 0 
+else
+    set(handles.edit9,'String',a);
+    directory = get(handles.edit9,'String');
+    %把选择内容放入文本框中
+end
+% Hints: get(hObject,'String') returns contents of edit9 as text
+%        str2double(get(hObject,'String')) returns contents of edit9 as a double
+end
 
+% --- Executes during object creation, after setting all properties.
+function edit9_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edit9 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+end
 
 % --- Executes on selection change in data.
 function data_Callback(hObject, eventdata, handles)
@@ -409,7 +455,8 @@ function begin_Callback(hObject, eventdata, handles)
     if length(list)>2
         rmdir([pwd,'\preprocess\*.*'],'s');
     end
-    copyfile([pwd,'\data_FunImg_T1Img\*.*'],[pwd,'\preprocess\']);
+    global directory
+    copyfile([directory],[pwd,'\preprocess\']);
     load([pwd,'\prepro_saved.mat']);
     Cfg.WorkingDir=[pwd,'\preprocess'];
     Cfg.DataProcessDir=[pwd,'\preprocess'];
@@ -474,10 +521,10 @@ function begin_Callback(hObject, eventdata, handles)
 
     %###############################################################%
     save prepro_saved.mat Cfg;
-    %DPARSFA_run('prepro_saved.mat');
+    DPARSFA_run('prepro_saved.mat');
     cd(path1);
     disp('dpabi run success');
-    uiwait(msgbox('dpabi预处理已完成','提示','help'));
+    uiwait(msgbox('预处理已完成','提示','help'));
 
     global ifresult1;
     if ifresult1 == 1
